@@ -1,0 +1,6 @@
+# itype= 1-resurgence, 2-head, 3-recharge, 4-sink; must be TWO comment lines here!
+# itype i1    i2    t1   t2      value
+  3      0    20    50   150      0.822 # recharge [mm/d] equal to 300 mm/yr
+  4     10    10   100   150     -1.0   # drawdown [m3/d]
+  1      0     0     0   150      1.    # fixed head (river) [m]
+  2     19    20     0   150      3.    # fixed head (reservoir) [m]
