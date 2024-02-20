@@ -67,7 +67,7 @@ def readParameter1D(infile='GROWAT1D_parameter.in',path='work/',control=False):
 
 
 #================================#
-def readBC1D(infile='GROWAT1D_bc.in',path='work/',control=False):
+def readHEADBC1D(infile='GROWAT1D_bc.in',path='work/',control=False):
     """
     ! read GROWAT1D boundary conditions file
     ! input:
@@ -75,7 +75,7 @@ def readBC1D(infile='GROWAT1D_bc.in',path='work/',control=False):
     ! output:
     !  dataBC      - array of boundary conditions
     ! use:
-    !  dataBC = libGROWAT1D.readBC1D()
+    !  dataBC = libGROWAT1D.readHEADBC1D()
     ! note:
     !  uses np.loadtxt(), data read as (float) array
     !  first two lines are meta data and are mandatory!
@@ -201,18 +201,30 @@ def createProperties1D(dataMAT,K,S,X,nx,control=False):
 
 
 #================================#
-def buildBC1D(dataBC,dx,time,time_scale,head,flow,control=False):
+def buildHEADBC1D(dataBC,dx,time,time_scale,head,flow,control=False):
     """
     ! set nodes marked with boundary conditions for current time step
+    ! input:
+    !  dataBC      - array of boundary conditions
+    !  dx          - [m] spatial discretisation
+    !  time        - [s] current time
+    !  time_scale  - conversion to user-defined time unit
+    !  head        - hydraulic head field [m]
+    !  flow        - flow field [m3/s]
+    ! output:
+    !  ibound      - marker for boundary conditions
+    !  irecharge   - marker for rain boundary conditions
+    !  head        - updated hydraulic head field [m]
+    !  flow        - updated flow field [m3/s]
+    ! use:
+    !  ibound,irecharge,head,flow = libGROWAT1D.buildHEADBC1D(dataBC,dx,time,time_scale,head,flow)
+    ! notes:
     !  ibound(i)   - boundary flag for node i
     !            0 - unknown head
     !            1 - fixed resurgence
     !            2 - fixed head
     !            3 - fixed recharge
     !            4 - fixed sink
-    ! use:
-    !  ibound,irecharge,head,flow = libGROWAT1D.buildBC1D(dataBC,dx,time,time_scale,head,flow)
-    ! notes:
     """
     nx = head.shape[0]
     ifixhead     = 0; ifixres      = 0
@@ -268,7 +280,7 @@ def buildBC1D(dataBC,dx,time,time_scale,head,flow,control=False):
 
 
 #================================#
-def buildHeadEquations1D_ss(dx,nx,conductm,head,flow,ibound):
+def buildHeadEquations1D_ss(dx,nx,Km,head,flow,ibound,bc='noflow'):
     """
     ! function assembles the element entries for the global conductance
     ! matrix and the rhs vector for the steady-state case
@@ -278,6 +290,9 @@ def buildHeadEquations1D_ss(dx,nx,conductm,head,flow,ibound):
     !  K          - hydraulic conductivity [m/s]
     !  ibound     - array for boundary markers
     !  head,flow  - head [m] and flow [m3/s] fields
+    !  bc         - boundary condition flag (
+    !               initial - set  boundary nodes to initial head 
+    !               noflow  - set  boundary nodes to no-flow
     ! output:
     !  matrix     - global conductivity matrix (sparse)
     !  rhs        -  rhs vector
@@ -295,40 +310,60 @@ def buildHeadEquations1D_ss(dx,nx,conductm,head,flow,ibound):
     for i in range(nx):
         ij = i
         matrix[ij,ij] = 0.
-        # diffusivity in x direction
-        if (i != 0 and i != nx-1):
-            matrix[ij,ij]   += -2.*dx2*conductm[ij]
-            matrix[ij,ij+1] += dx2*conductm[ij+1]
-            matrix[ij,ij-1] += dx2*conductm[ij-1]
-
-        if (ibound[ij]==1 or ibound[ij]==2):
-            matrix[ij,ij]   = 1.
+        # fixed-head boundary condition node
+        if (np.abs(ibound[ij])==1 or np.abs(ibound[ij])==2): 
+            matrix[ij,ij]   = 1e10
+        # other nodes
+        else:
+            # classical diffusion operator in interior region
+            if (i != 0 and i != nx-1):
+                matrix[ij,ij]   += -2*dx2*Km[ij]
+                matrix[ij,ij+1] += +1*dx2*Km[ij+1]
+                matrix[ij,ij-1] += +1*dx2*Km[ij-1]
+            if (bc=='initial'):
+                if (i==0):
+                    ibound[ij]    = -1
+                    matrix[ij,ij] = 1e10
+                if (i==nx-1):
+                    ibound[ij]    = -1
+                    matrix[ij,ij] = 1e10
+            if (bc=='noflow'):
+                # left side
+                if (i==0):
+                    matrix[ij,ij] = Km[ij]/dx
+                    matrix[ij,ij+1] = -Km[ij+1]/dx
+                # right side
+                if (i==nx-1):
+                    matrix[ij,ij] = Km[ij]/dx
+                    matrix[ij,ij-1] = -Km[ij-1]/dx
     #-----------------------------------------------------------------------
     # assemble right-hand side
     #-----------------------------------------------------------------------
     for i in range(nx):
         ij = i
         rhs[ij] = 0.
-        # surface inflow
-        surface = dx
-        if ((i==0) or (i==nx-1)): surface = 0.5*dx
-        if (surface != 0.):
-            rhs[ij] += -flow[ij]/surface
-    #-----------------------------------------------------------------------
-    # check for fixed head boundary condition
-    #-----------------------------------------------------------------------
-    for i in range(nx):
-        ij = i
-        if (ibound[ij]==1 or ibound[ij]==2):
-            matrix[ij,ij] = 10e10*matrix[ij,ij]
-            rhs[ij]       = matrix[ij,ij]*head[ij]
+        # fixed-head boundary condition node
+        if (np.abs(ibound[ij])==1 or np.abs(ibound[ij])==2): 
+            rhs[ij] = matrix[ij,ij]*head[ij]
+        # other nodes
+        else:
+            # surface inflow
+            surface = dx
+            if ((i==0) or (i==nx-1)): surface = 0.5*dx
+            # classical diffusion operator in interior region
+            if (i != 0 and i != nx-1):
+                rhs[ij] = -flow[ij]/surface
+            # check for no-flow boundary condition
+            if (bc=='noflow'):
+                if (i==0):    rhs[ij] = 0.
+                if (i==nx-1): rhs[ij] = 0.
     # convert sparse lil format to csr format
     matrix = matrix.tocsr()
     return matrix,rhs
 
 
 #================================#
-def buildHeadEquations1D_t(dx,nx,time_step,conductm,storagem,head,headOld,flow,flowOld,ibound,omega=1.):
+def buildHeadEquations1D_t(dx,nx,time_step,Km,Sm,head,headOld,flow,flowOld,ibound,omega=1.,bc='noflow'):
     """
     ! function assembles the element entries for the global conductance
     ! matrix and the rhs vector for the transient case
@@ -338,6 +373,11 @@ def buildHeadEquations1D_t(dx,nx,time_step,conductm,storagem,head,headOld,flow,f
     !  K,S        - hydraulic conductivity [m/s], specific storage [1/s]
     !  ibound     - array for boundary markers
     !  head,flow  - head [m] and flow [m3/s] fields
+    !  omega      - relaxation parameter (default: 1)
+    !               0-explicit, 1-implicit, 0.5-Crank-Nicholson
+    !  bc         - boundary condition flag (
+    !               initial - set  boundary nodes to initial head 
+    !               noflow  - set  boundary nodes to no-flow
     ! output:
     !  matrix     - global conductivity matrix (sparse)
     !  rhs        -  rhs vector
@@ -356,52 +396,66 @@ def buildHeadEquations1D_t(dx,nx,time_step,conductm,storagem,head,headOld,flow,f
     dtdx2 = time_step / dx**2
     for i in range(nx):
         ij = i
-        # new unkown head
-        matrix[ij,ij] = storagem[ij]
-        # diffusivity in x direction (implicit)
-        if (i != 0 and i != nx-1):
-            matrix[ij,ij]   += 2.*omega*dtdx2*conductm[ij]
-            matrix[ij,ij+1] += -omega*dtdx2*conductm[ij+1]
-            matrix[ij,ij-1] += -omega*dtdx2*conductm[ij-1]
-
-        if (ibound[ij]==1 or ibound[ij]==2):
-            matrix[ij,ij]   = 1.
+        matrix[ij,ij] = 1.
+        # fixed-head boundary condition node
+        if (np.abs(ibound[ij])==1 or np.abs(ibound[ij])==2): 
+            matrix[ij,ij]   = 1e10
+        # other nodes
+        else:
+            # classical diffusion operator in interior region (implicit)
+            if (i != 0 and i != nx-1):
+                matrix[ij,ij]   += +2*omega*dtdx2*Km[ij]/Sm[ij]
+                matrix[ij,ij+1] += -1*omega*dtdx2*Km[ij+1]/Sm[ij+1]
+                matrix[ij,ij-1] += -1*omega*dtdx2*Km[ij-1]/Sm[ij-1]
+            if (bc=='initial'):
+                if (i==0):
+                    ibound[ij]    = -1
+                    matrix[ij,ij] = 1e10
+                if (i==nx-1):
+                    ibound[ij]    = -1
+                    matrix[ij,ij] = 1e10
+            if (bc=='noflow'):
+                # left side
+                if (i==0):
+                    matrix[ij,ij] = Km[ij]/dx
+                    matrix[ij,ij+1] = -Km[ij+1]/dx
+                # right side
+                if (i==nx-1):
+                    matrix[ij,ij] = Km[ij]/dx
+                    matrix[ij,ij-1] = -Km[ij-1]/dx   
     #-----------------------------------------------------------------------
     # assemble right-hand side
     #-----------------------------------------------------------------------
     for i in range(nx):
         ij = i
-        # old head
-        rhs[ij] = headOld[ij]*storagem[ij]
-        # surface inflow 
-        surface = dx
-        if ((i==0) or (i==nx-1)):     surface = 0.5*dx
-        if (surface != 0.):
-            rhs[ij] += (1.-omega)*flowOld[ij]/surface*time_step 
-            rhs[ij] += omega*flow[ij]/surface*time_step
-        # diffusivity in x direction (explicit)
-        if (i != 0 and i != nx-1):
-            rhs[ij] += -2.*(1.-omega)*dtdx2*conductm[ij] 
-            rhs[ij] += headOld[ij+1]*(1.-omega)*dtdx2*conductm[ij+1] 
-            rhs[ij] += headOld[ij-1]*(1.-omega)*dtdx2*conductm[ij-1]
-
-        if (ibound[ij]==1 or ibound[ij]==2):
-            rhs[ij] = headOld[ij]              
-    #-----------------------------------------------------------------------
-    # check for fixed head boundary condition
-    #-----------------------------------------------------------------------
-    for i in range(nx):
-        ij = i
-        if (ibound[ij]==1 or ibound[ij]==2):
-            matrix[ij,ij] = 10e10*matrix[ij,ij]
-            rhs[ij]       = matrix[ij,ij]*headOld[ij]
+        rhs[ij] = headOld[ij]
+        # fixed-head boundary condition node
+        if (np.abs(ibound[ij])==1 or np.abs(ibound[ij])==2): 
+            rhs[ij] = matrix[ij,ij]*head[ij]
+        # other nodes
+        else:
+            surface = dx
+            if ((i==0) or (i==nx-1)): surface = 0.5*dx
+            # interior nodes
+            if (i != 0 and i != nx-1):
+                # flow as right-hand side condition
+                rhs[ij] += (1-omega)*flowOld[ij]/surface*time_step/Sm[ij]
+                rhs[ij] += omega*flow[ij]/surface*time_step/Sm[ij]
+                # classical diffusion operator in interior region (explicit)
+                rhs[ij] += -2*headOld[ij]*(1-omega)*dtdx2*Km[ij]/Sm[ij]
+                rhs[ij] += +1*headOld[ij+1]*(1-omega)*dtdx2*Km[ij+1]/Sm[ij+1]
+                rhs[ij] += +1*headOld[ij-1]*(1-omega)*dtdx2*Km[ij-1]/Sm[ij-1]
+            # check for no-flow boundary condition
+            if (bc=='noflow'):
+                if (i==0):    rhs[ij] = 0.
+                if (i==nx-1): rhs[ij] = 0.             
     # convert sparse lil format to csr format
     matrix = matrix.tocsr()
     return matrix,rhs
 
 
 #================================#
-def solveHeadEquations1D(matrix,rhs):
+def solveLinearSystem1D(matrix,rhs):
     """
     ! Solve linear system of equations
     ! with sparse matrix solver
@@ -411,7 +465,7 @@ def solveHeadEquations1D(matrix,rhs):
     ! output:
     !  head       - head [m] field
     ! use:
-    !  head = libGROWAT1D.solveHeadEquations1D(matrix,rhs)
+    !  head = libGROWAT1D.solveLinearSystem1D(matrix,rhs)
     """
     head = scipy.sparse.linalg.spsolve(matrix,rhs,permc_spec='MMD_AT_PLUS_A')
     return head
@@ -462,7 +516,7 @@ def saveToScreen1D(saved,time,time_scale,head,vabs):
         
         
 #================================#
-def saveHeadsAndVelocities1D(itime,time,time_scale,whichtime,x,head,flow,xc,vcx,ibound,irecharge,name='FD_'):
+def saveHeadsAndVelocities1D(itime,time,time_scale,whichtime,x,head,flow,xc,vcx,ibound,irecharge,path='work/',name='FD_'):
     """
     ! function saves head, flow and velocity components to file
     ! input:
@@ -484,7 +538,7 @@ def saveHeadsAndVelocities1D(itime,time,time_scale,whichtime,x,head,flow,xc,vcx,
     """
     # save heads and flow to filename1
     format1 = "%10i %12.2f %12.2f %12.2f %2i %2i"
-    filename1 = "work/"+name+f"{itime:04}.heads"
+    filename1 = path+name+f"{itime:04}.heads"
     f = open(filename1,'w')
     print('time,whichtime: ',time/time_scale,whichtime,file=f)
     for i in range(x.shape[0]):
@@ -503,8 +557,23 @@ def saveHeadsAndVelocities1D(itime,time,time_scale,whichtime,x,head,flow,xc,vcx,
 
 
 #================================#
-def plotHeads1D(itime,time,time_scale,x,xc,head,vcx,ibound,irecharge,vmin=0.,vmax=4.,vstep=21,plot=False,name='FD_'):
-    filename = "work/"+name+f"{itime:04}.png"
+def plotHeadsAndVelocities1D(itime,time,time_scale,x,head,xc,vcx,ibound,irecharge,vmin=0.,vmax=4.,vstep=21,plot=False,path='work/',name='FD_'):
+    """
+    function plots heads and velocities
+    input:
+    itime,time,time_scale - time iterator, time, time scale
+    x   [m]               - x-coordinates for heads
+    head [m]              - hydraulic head
+    xc    [m]             - x-coordinates for velocities
+    vcx     [m/s]         - velocity in x-direction
+    vmin,vmax             - min/max value for colorbar (defaults=0,4)
+    vstep                 - steps for colorbar (default=21)
+    plot                  - flag for showing plot (default=False)
+    name                  - prefix for filename (default='FD_')
+    output:
+    figure, if plot flag set to True
+    """
+    filename = path+name+f"{itime:04}.png"
     cmap = mpl.cm.jet
     levels = np.linspace(0,1,21,endpoint=True)
     norm   = mpl.colors.BoundaryNorm(levels, cmap.N)
@@ -519,6 +588,7 @@ def plotHeads1D(itime,time,time_scale,x,xc,head,vcx,ibound,irecharge,vmin=0.,vma
     plt.plot(x[irecharge==3],4*np.ones_like(x)[irecharge==3],lw=0,marker='o',markersize=10,alpha=0.6,label='3')
     plt.plot(x[ibound==4],np.ones_like(x)[ibound==4],lw=0,marker='^',markersize=10,alpha=0.6,label='4')
     vcabs = np.sqrt(vcx**2)
+    vcabs += 0.001
     cbar1=plt.quiver(xc,np.ones_like(xc),vcx/vcabs,np.zeros_like(vcx),vcabs,alpha=0.4,width=0.005,scale=20,pivot="middle",norm=norm,cmap=cmap)
     clabel1=plt.colorbar(cbar1,extend='both')
     clabel1.set_label('v [m/d]')

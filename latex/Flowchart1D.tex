@@ -37,7 +37,7 @@ fill=orange!30]
 minimum width=3cm, 
 minimum height=1cm, 
 text centered, 
-text width=6cm, 
+text width=7cm, 
 draw=black, 
 fill=green!30]
 
@@ -71,7 +71,7 @@ fill=green!30]
 \setlength\itemsep{-0.5em}
 \item createNodes1D()
 \item createFields1D()
-\item createBC1D()
+\item createHEADBC1D()
 \item createProperties1D()
 \end{itemize}
 };
@@ -80,11 +80,12 @@ fill=green!30]
 \node(run)[run, below of=create, yshift=-2cm]{{\bf SOLVE} \\
 \begin{itemize}
 \setlength\itemsep{-0.5em}
-\item buildBC1D()
-\item buildHeadEquations1D\_ss()
-\item solveHeadEquations1D()
+\item buildHEADBC1D()
+\item buildHeadEquations1D\_\{ss,t\}()
+\item solveLinearSystem1D()
 \item solveVelocities1D()
 \item saveHeadsAndVelocities1D()
+\item plotHeadsAndVelocities1D()
 \end{itemize}
 };
 \draw [arrow] (create) -- (run);
