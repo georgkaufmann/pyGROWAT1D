@@ -6,7 +6,7 @@ Untitled*.ipynb
 div/
 lit/
 !lit/README.md
-work/*.png
-work/*.jpg
-work/*.heads
-work/*.vel
+work/
+!work/GROWAT1D_parameter.in
+!work/GROWAT1D_bc.in
+!work/GROWAT1D_materials.in

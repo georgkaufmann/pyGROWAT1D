@@ -56,6 +56,7 @@ def readParameter1D(infile='GROWAT1D_parameter.in',path='work/',control=False):
     # control output to screen
     if (control):
         print('== GROWAT1D ==')
+        print('%20s %20s' % ('path:',path))
         print('%20s %10.2f %10.2f' % ('xmin,xmax [m]:',xmin,xmax))
         print('%20s %10i' % ('nx:',nx))
         
@@ -547,7 +548,7 @@ def saveHeadsAndVelocities1D(itime,time,time_scale,whichtime,x,head,flow,xc,vcx,
     
     # save velocities to filename2
     format2 = "%10i %12.2f %12.2f"
-    filename2 = "work/"+name+f"{itime:04}.vel"
+    filename2 = path+name+f"{itime:04}.vel"
     f = open(filename2,'w')
     print('time,whichtime: ',time/time_scale,whichtime,file=f)
     for i in range(xc.shape[0]):
