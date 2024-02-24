@@ -318,9 +318,11 @@ def buildHeadEquations1D_ss(dx,nx,Km,head,flow,ibound,bc='noflow'):
         else:
             # classical diffusion operator in interior region
             if (i != 0 and i != nx-1):
-                matrix[ij,ij]   += -2*dx2*Km[ij]
-                matrix[ij,ij+1] += +1*dx2*Km[ij+1]
-                matrix[ij,ij-1] += +1*dx2*Km[ij-1]
+                Kleft  = (Km[ij-1]+Km[ij])/2
+                Kright = (Km[ij]+Km[ij+1])/2
+                matrix[ij,ij]   += -1*dx2*(Kleft + Kright)
+                matrix[ij,ij+1] += +1*dx2*Kright
+                matrix[ij,ij-1] += +1*dx2*Kleft
             if (bc=='initial'):
                 if (i==0):
                     ibound[ij]    = -1
@@ -405,9 +407,11 @@ def buildHeadEquations1D_t(dx,nx,time_step,Km,Sm,head,headOld,flow,flowOld,iboun
         else:
             # classical diffusion operator in interior region (implicit)
             if (i != 0 and i != nx-1):
-                matrix[ij,ij]   += +2*omega*dtdx2*Km[ij]/Sm[ij]
-                matrix[ij,ij+1] += -1*omega*dtdx2*Km[ij+1]/Sm[ij+1]
-                matrix[ij,ij-1] += -1*omega*dtdx2*Km[ij-1]/Sm[ij-1]
+                Kleft  = (Km[ij-1]+Km[ij])/2
+                Kright = (Km[ij]+Km[ij+1])/2
+                matrix[ij,ij]   += +1*omega*dtdx2*(Kleft + Kright)/Sm[ij]
+                matrix[ij,ij+1] += -1*omega*dtdx2*Kright/Sm[ij]
+                matrix[ij,ij-1] += -1*omega*dtdx2*Kleft/Sm[ij]
             if (bc=='initial'):
                 if (i==0):
                     ibound[ij]    = -1
@@ -443,9 +447,11 @@ def buildHeadEquations1D_t(dx,nx,time_step,Km,Sm,head,headOld,flow,flowOld,iboun
                 rhs[ij] += (1-omega)*flowOld[ij]/surface*time_step/Sm[ij]
                 rhs[ij] += omega*flow[ij]/surface*time_step/Sm[ij]
                 # classical diffusion operator in interior region (explicit)
-                rhs[ij] += -2*headOld[ij]*(1-omega)*dtdx2*Km[ij]/Sm[ij]
-                rhs[ij] += +1*headOld[ij+1]*(1-omega)*dtdx2*Km[ij+1]/Sm[ij+1]
-                rhs[ij] += +1*headOld[ij-1]*(1-omega)*dtdx2*Km[ij-1]/Sm[ij-1]
+                Kleft  = (Km[ij-1]+Km[ij])/2
+                Kright = (Km[ij]+Km[ij+1])/2
+                rhs[ij] += -1*headOld[ij]*(1-omega)*dtdx2*(Kleft+Kright)/Sm[ij]
+                rhs[ij] += +1*headOld[ij+1]*(1-omega)*dtdx2*Kright/Sm[ij]
+                rhs[ij] += +1*headOld[ij-1]*(1-omega)*dtdx2*Kleft/Sm[ij]
             # check for no-flow boundary condition
             if (bc=='noflow'):
                 if (i==0):    rhs[ij] = 0.

@@ -25,5 +25,5 @@ numerical modelling in geosciences, see my
 for steady-state and transient flow. 
 
 - A technical description can be found in the [github repository](https://github.com/georgkaufmann/pyGROWAT1D).
-- A discussion of modelling results is given in the [(Dynamics)<sup>2</sup> blog](https://blogs.kawueweb.de/geodyn).
+- A discussion of modelling results is given in the [(Dynamics)<sup>2</sup> blog](https://blog.kawueweb.de/dynamics).
 

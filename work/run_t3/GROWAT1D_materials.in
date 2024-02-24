@@ -1,4 +1,0 @@
-# must be TWO comment lines here! First data line is STANDARD material!
-#   name x1[m] x2[m]  K[m/s] S[1/m]
-   Soil1  1000  2000  3e-3   1e-2
-   Soil2  1000  2000  4e-3   1e-3
