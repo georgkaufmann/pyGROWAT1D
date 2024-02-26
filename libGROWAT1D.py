@@ -182,8 +182,8 @@ def createProperties1D(dataMAT,K,S,X,nx,control=False):
         K[ij] = float(dataMAT[0][3])
         S[ij] = float(dataMAT[0][4])
     # additional materials (other lines in GROWAT2D_materials.in)
-    if (dataMAT.shape[1]!=0):
-        for ib in range(dataMAT.shape[0]):
+    if (dataMAT.shape[0] > 1):
+        for ib in range(1,dataMAT.shape[0]):
             mat = dataMAT[ib][0]
             x1 = float(dataMAT[ib][1])
             x2 = float(dataMAT[ib][2])
