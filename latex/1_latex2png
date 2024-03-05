@@ -1,0 +1,8 @@
+#!/bin/bash
+infile="pyGROWAT1D_Flowchart"
+pdflatex $infile
+pdflatex $infile
+
+convert -trim -density 300 $infile.pdf ../images/$infile.png
+
+\rm *.aux *.log *.nav *.out *.snm *.toc *.synctex.gz
